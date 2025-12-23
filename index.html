@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vending Machine</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="vending-machine">
+        <div class="machine-header">
+          <h1>🍫 Vending Machine 🥤</h1>
+          <div class="status-display">
+            <div id="statusMessage">Welcome! Select a product to start</div>
+          </div>
+        </div>
+
+        <div class="products-grid" id="productsGrid">
+          <!-- Products will be dynamically generated -->
+        </div>
+
+        <div class="transaction-panel">
+          <div class="cart-section">
+            <div class="cart-header">
+              <h3>Shopping Cart (<span id="cartCount">0</span>)</h3>
+              <button id="clearCartBtn" class="btn-clear" style="display: none;">Clear Cart</button>
+            </div>
+            <div id="cartItems" class="cart-items">
+              <span class="no-selection">Cart is empty</span>
+            </div>
+            <div id="cartTotal" class="cart-total" style="display: none;">
+              <span>Total:</span>
+              <span id="totalAmount" class="total-price">₹0</span>
+            </div>
+          </div>
+
+          <div class="payment-section">
+            <h3>Payment</h3>
+            <div class="amount-input">
+              <span class="currency">₹</span>
+              <input
+                type="number"
+                id="amountInput"
+                placeholder="Enter amount"
+                min="1"
+              />
+              <button id="insertBtn" class="btn-primary">Complete Purchase</button>
+            </div>
+          </div>
+
+          <div class="change-display" id="changeDisplay" style="display: none">
+            <h3>Your Change</h3>
+            <div id="changeDetails"></div>
+          </div>
+        </div>
+
+        <div class="admin-panel">
+          <h3>Admin: Restock Product</h3>
+          <div class="restock-form">
+            <input
+              type="number"
+              id="restockId"
+              placeholder="Product ID"
+              min="1"
+            />
+            <input type="text" id="restockName" placeholder="Product Name" />
+            <input
+              type="number"
+              id="restockPrice"
+              placeholder="Price (₹)"
+              min="1"
+            />
+            <button id="restockBtn" class="btn-secondary">Add Product</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="vending.js"></script>
+    <script>
+      // Initialize UI
+      function renderProducts() {
+        const productsGrid = document.getElementById("productsGrid");
+        productsGrid.innerHTML = "";
+
+        vendingMachine.products.forEach((product) => {
+          const productCard = document.createElement("div");
+          productCard.className = "product-card";
+          productCard.onclick = () => selectProduct(product.id);
+
+          productCard.innerHTML = `
+                    <div class="product-name">${product.name}</div>
+                    <div class="product-price">₹${product.price}</div>
+                    <div class="product-id">ID: ${product.id}</div>
+                `;
+
+          productsGrid.appendChild(productCard);
+        });
+      }
+
+      function selectProduct(productId) {
+        const result = vendingMachine.selectProduct(productId);
+        const statusMessage = document.getElementById("statusMessage");
+        
+        if (result.success) {
+          statusMessage.textContent = result.product;
+          statusMessage.className = "status-success";
+          updateCart();
+          updateProductCards();
+        } else {
+          statusMessage.textContent = result.message;
+          statusMessage.className = "status-error";
+        }
+      }
+      
+      function removeFromCart(productId) {
+        const result = vendingMachine.removeFromCart(productId);
+        const statusMessage = document.getElementById("statusMessage");
+        
+        if (result.success) {
+          statusMessage.textContent = result.message;
+          statusMessage.className = "status-success";
+          updateCart();
+          updateProductCards();
+        }
+      }
+      
+      function clearCart() {
+        vendingMachine.clearCart();
+        updateCart();
+        updateProductCards();
+        document.getElementById("statusMessage").textContent = "Cart cleared";
+      }
+      
+      function updateCart() {
+        const cartItems = document.getElementById("cartItems");
+        const cartCount = document.getElementById("cartCount");
+        const cartTotal = document.getElementById("cartTotal");
+        const totalAmount = document.getElementById("totalAmount");
+        const clearCartBtn = document.getElementById("clearCartBtn");
+        
+        if (vendingMachine.selectedProducts.length === 0) {
+          cartItems.innerHTML = '<span class="no-selection">Cart is empty</span>';
+          cartTotal.style.display = "none";
+          clearCartBtn.style.display = "none";
+          cartCount.textContent = "0";
+        } else {
+          let html = "";
+          vendingMachine.selectedProducts.forEach(product => {
+            html += `
+              <div class="cart-item">
+                <div class="cart-item-info">
+                  <span class="cart-item-name">${product.name}</span>
+                  <span class="cart-item-price">₹${product.price}</span>
+                </div>
+                <button class="btn-remove" onclick="removeFromCart(${product.id})">✕</button>
+              </div>
+            `;
+          });
+          cartItems.innerHTML = html;
+          const total = vendingMachine.getTotalPrice();
+          totalAmount.textContent = `₹${total}`;
+          cartTotal.style.display = "flex";
+          clearCartBtn.style.display = "inline-block";
+          cartCount.textContent = vendingMachine.selectedProducts.length;
+        }
+      }
+      
+      function updateProductCards() {
+        document.querySelectorAll(".product-card").forEach((card, index) => {
+          const product = vendingMachine.products[index];
+          if (!product) return;
+          
+          const isInCart = vendingMachine.selectedProducts.some(p => p.id === product.id);
+          if (isInCart) {
+            card.classList.add("in-cart");
+          } else {
+            card.classList.remove("in-cart");
+          }
+        });
+      }
+
+      function insertMoney() {
+        const amountInput = document.getElementById("amountInput");
+        const amount = parseInt(amountInput.value);
+        const statusMessage = document.getElementById("statusMessage");
+        const changeDisplay = document.getElementById("changeDisplay");
+        const changeDetails = document.getElementById("changeDetails");
+
+        if (!amount || amount <= 0) {
+          statusMessage.textContent = "Please enter a valid amount";
+          statusMessage.className = "status-error";
+          return;
+        }
+
+        const result = vendingMachine.insertMoney(amount);
+
+        if (result.success) {
+          statusMessage.textContent = `${result.message} Change: ₹${result.changeAmount}`;
+          statusMessage.className = "status-success";
+
+          // Display change
+          if (Object.keys(result.change).length > 0) {
+            let changeHTML = '<div class="change-breakdown">';
+            for (const [denom, count] of Object.entries(result.change)) {
+              changeHTML += `<div class="change-item">₹${denom} × ${count}</div>`;
+            }
+            changeHTML += "</div>";
+            changeDetails.innerHTML = changeHTML;
+            changeDisplay.style.display = "block";
+
+            setTimeout(() => {
+              changeDisplay.style.display = "none";
+            }, 5000);
+          } else {
+            changeDisplay.style.display = "none";
+          }
+
+          // Reset UI
+          amountInput.value = "";
+          updateCart();
+          updateProductCards();
+
+          // Re-render products (purchased items are now removed)
+          renderProducts();
+
+          setTimeout(() => {
+            statusMessage.textContent = "Welcome! Select products to start";
+            statusMessage.className = "";
+          }, 5000);
+        } else {
+          statusMessage.textContent = result.message;
+          statusMessage.className = "status-error";
+        }
+      }
+
+      function restockProduct() {
+        const id = parseInt(document.getElementById("restockId").value);
+        const name = document.getElementById("restockName").value.trim();
+        const price = parseInt(document.getElementById("restockPrice").value);
+        const statusMessage = document.getElementById("statusMessage");
+
+        if (!id || !name || !price) {
+          statusMessage.textContent = "Please fill all restock fields";
+          statusMessage.className = "status-error";
+          return;
+        }
+
+        const result = vendingMachine.restockProduct({ id, name, price });
+
+        if (result.success) {
+          statusMessage.textContent = result.message;
+          statusMessage.className = "status-success";
+          renderProducts();
+
+          // Clear form
+          document.getElementById("restockId").value = "";
+          document.getElementById("restockName").value = "";
+          document.getElementById("restockPrice").value = "";
+        } else {
+          statusMessage.textContent = result.message;
+          statusMessage.className = "status-error";
+        }
+      }
+
+      // Event listeners
+      document
+        .getElementById("insertBtn")
+        .addEventListener("click", insertMoney);
+      document
+        .getElementById("restockBtn")
+        .addEventListener("click", restockProduct);
+      document
+        .getElementById("clearCartBtn")
+        .addEventListener("click", clearCart);
+      document
+        .getElementById("amountInput")
+        .addEventListener("keypress", (e) => {
+          if (e.key === "Enter") insertMoney();
+        });
+
+      // Initial render
+      renderProducts();
+      updateCart();
+    </script>
+  </body>
+</html>
